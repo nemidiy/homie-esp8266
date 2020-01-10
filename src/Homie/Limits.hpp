@@ -36,4 +36,6 @@ namespace HomieInternals {
 
   const uint8_t MAX_IP_STRING_LENGTH = 16 + 1;
 
+  const uint8_t MAX_PSK_STRING_LENGTH = 64 + 1;
+
 }  // namespace HomieInternals

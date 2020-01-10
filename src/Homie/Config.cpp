@@ -90,6 +90,8 @@ bool Config::load() {
   const char* reqMqttUsername = reqMqtt["username"] | "";
   const char* reqMqttPassword = reqMqtt["password"] | "";
   const char* reqMqttFingerprint = reqMqtt["ssl_fingerprint"] | "";
+  const char* reqMqttPsk = reqMqtt["psk"] | "";
+  const char* reqMqttPskIdent = reqMqtt["psk_identity"] | "";
   const char* reqMqttBaseTopic = reqMqtt["base_topic"] | DEFAULT_MQTT_BASE_TOPIC;
 
   strlcpy(_configStruct.name, reqName, MAX_FRIENDLY_NAME_LENGTH);
@@ -107,10 +109,15 @@ bool Config::load() {
   strlcpy(_configStruct.mqtt.server.host, reqMqttHost, MAX_HOSTNAME_LENGTH);
 #if ASYNC_TCP_SSL_ENABLED
   _configStruct.mqtt.server.ssl.enabled = reqMqttSsl;
+#if ESP8266
   if (strcmp_P(reqMqttFingerprint, PSTR("")) != 0) {
     _configStruct.mqtt.server.ssl.hasFingerprint = true;
     Helpers::hexStringToByteArray(reqMqttFingerprint, _configStruct.mqtt.server.ssl.fingerprint, MAX_FINGERPRINT_SIZE);
   }
+#elif defined(ESP32)
+  strlcpy(_configStruct.mqtt.server.ssl.psk, reqMqttPsk, MAX_PSK_STRING_LENGTH);
+  strlcpy(_configStruct.mqtt.server.ssl.psk_ident, reqMqttPskIdent, MAX_PSK_STRING_LENGTH);
+#endif
 #endif
   _configStruct.mqtt.server.port = reqMqttPort;
   strlcpy(_configStruct.mqtt.baseTopic, reqMqttBaseTopic, MAX_MQTT_BASE_TOPIC_LENGTH);
@@ -305,11 +312,18 @@ void Config::log() const {
   Interface::get().getLogger() << F("    ◦ Port: ") << _configStruct.mqtt.server.port << endl;
 #if ASYNC_TCP_SSL_ENABLED
   Interface::get().getLogger() << F("    ◦ SSL enabled: ") << (_configStruct.mqtt.server.ssl.enabled ? "true" : "false") << endl;
+#if ESP8266
   if (_configStruct.mqtt.server.ssl.enabled && _configStruct.mqtt.server.ssl.hasFingerprint) {
     char hexBuf[MAX_FINGERPRINT_STRING_LENGTH];
     Helpers::byteArrayToHexString(Interface::get().getConfig().get().mqtt.server.ssl.fingerprint, hexBuf, MAX_FINGERPRINT_SIZE);
     Interface::get().getLogger() << F("    ◦ Fingerprint: ") << hexBuf << endl;
   }
+#elif defined(ESP32)
+  if (_configStruct.mqtt.server.ssl.enabled) {
+    Interface::get().getLogger() << F("    ◦ PSK identity not shown") << endl;
+    Interface::get().getLogger() << F("    ◦ PSK not shown") << endl;
+  }
+#endif
 #endif
   Interface::get().getLogger() << F("    ◦ Base topic: ") << _configStruct.mqtt.baseTopic << endl;
   Interface::get().getLogger() << F("    ◦ Auth? ") << (_configStruct.mqtt.auth ? F("yes") : F("no")) << endl;

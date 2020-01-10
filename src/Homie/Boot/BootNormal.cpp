@@ -77,12 +77,18 @@ void BootNormal::setup() {
 #if ASYNC_TCP_SSL_ENABLED
   Interface::get().getLogger() << "SSL is: " << Interface::get().getConfig().get().mqtt.server.ssl.enabled << endl;
   Interface::get().getMqttClient().setSecure(Interface::get().getConfig().get().mqtt.server.ssl.enabled);
-  if (Interface::get().getConfig().get().mqtt.server.ssl.enabled && Interface::get().getConfig().get().mqtt.server.ssl.hasFingerprint) {
+  if (Interface::get().getConfig().get().mqtt.server.ssl.enabled){ // && Interface::get().getConfig().get().mqtt.server.ssl.hasFingerprint) {
+#if defined(ESP8266)
     char hexBuf[MAX_FINGERPRINT_STRING_LENGTH];
     Helpers::byteArrayToHexString(Interface::get().getConfig().get().mqtt.server.ssl.fingerprint, hexBuf, MAX_FINGERPRINT_SIZE);
     Interface::get().getLogger() << "Using fingerprint: " << hexBuf << endl;
     Interface::get().getMqttClient().addServerFingerprint((const uint8_t*)Interface::get().getConfig().get().mqtt.server.ssl.fingerprint);
+#elif defined(ESP32)
+    Interface::get().getMqttClient().setPsk(
+      Interface::get().getConfig().get().mqtt.server.ssl.psk_ident,
+      Interface::get().getConfig().get().mqtt.server.ssl.psk);
   }
+#endif
 #endif
 
   Interface::get().getMqttClient().setMaxTopicLength(MAX_MQTT_TOPIC_LENGTH);
@@ -164,6 +170,7 @@ void BootNormal::loop() {
     return;
   }
 
+  if(_otaOngoing) return;
   // here, we have notified the sketch we are ready
 
   if (_mqttOfflineMessageId == 0 && Interface::get().flaggedForSleep) {
@@ -211,13 +218,20 @@ char* BootNormal::_prefixMqttTopic(PGM_P topic) {
 }
 
 bool BootNormal::_publishOtaStatus(int status, const char* info) {
+  static uint8_t count = 0;
+  ++count;
+
   String payload(status);
   if (info) {
     payload.concat(F(" "));
     payload.concat(info);
   }
-
-  return Interface::get().getMqttClient().publish(_prefixMqttTopic(PSTR("/$implementation/ota/status")), 0, true, payload.c_str()) != 0;
+  if(count == 100){
+    count = 0;
+    return Interface::get().getMqttClient().publish(
+              _prefixMqttTopic(PSTR("/$implementation/ota/status")), 0, true, payload.c_str()) != 0;
+  }
+  return false;
 }
 
 void BootNormal::_endOtaUpdate(bool success, uint8_t update_error) {
@@ -779,6 +793,13 @@ void BootNormal::_onMqttDisconnected(AsyncMqttClientDisconnectReason reason) {
 }
 
 void BootNormal::_onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
+  /*
+  Interface::get().getLogger() << F("BootNormal::_onMqttMessage") << endl;
+  Interface::get().getLogger() << "topic > " << topic << endl;
+  Interface::get().getLogger() << "len > " << len << endl;
+  Interface::get().getLogger() << "index > " << index << endl;
+  Interface::get().getLogger() << "total > " << total << endl;
+  */
   if (total == 0) return;  // no empty message possible
 
   if (index == 0) {
@@ -875,6 +896,13 @@ bool HomieInternals::BootNormal::__fillPayloadBuffer(char * topic, char * payloa
 }
 
 bool HomieInternals::BootNormal::__handleOTAUpdates(char* topic, char* payload, const AsyncMqttClientMessageProperties& properties, size_t len, size_t index, size_t total) {
+  /*
+  Interface::get().getLogger() << F("HomieInternals::BootNormal::__handleOTAUpdates...") << endl;
+  Interface::get().getLogger() << "0 > " << _mqttTopicLevels.get()[0] << endl;
+  Interface::get().getLogger() << "1 > " << _mqttTopicLevels.get()[1] << endl;
+  Interface::get().getLogger() << "2 > " << _mqttTopicLevels.get()[2] << endl;
+  Interface::get().getLogger() << "3 > " << _mqttTopicLevels.get()[3] << endl;
+  */
   if (
     _mqttTopicLevelsCount == 5
     && strcmp(_mqttTopicLevels.get()[0], Interface::get().getConfig().get().deviceId) == 0
@@ -1047,6 +1075,7 @@ bool HomieInternals::BootNormal::__handleOTAUpdates(char* topic, char* payload, 
     }
     return true;
   }
+  Interface::get().getLogger() << F("HomieInternals::BootNormal::__handleOTAUpdates FALSE") << endl;
   return false;
 }
 

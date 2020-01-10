@@ -28,9 +28,14 @@ struct ConfigStruct {
 #if ASYNC_TCP_SSL_ENABLED
       struct {
         bool enabled;
+#if ESP8266
         bool hasFingerprint;
         uint8_t fingerprint[MAX_FINGERPRINT_SIZE];
+#elif ESP32
+        char psk_ident[MAX_PSK_STRING_LENGTH];
+        char psk[MAX_PSK_STRING_LENGTH];
       } ssl;
+#endif
 #endif
     } server;
     char baseTopic[MAX_MQTT_BASE_TOPIC_LENGTH];
@@ -44,3 +49,4 @@ struct ConfigStruct {
   } ota;
 };
 }  // namespace HomieInternals
+
